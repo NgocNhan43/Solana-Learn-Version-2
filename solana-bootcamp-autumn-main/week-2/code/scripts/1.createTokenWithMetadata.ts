@@ -47,7 +47,7 @@ import {
    * - initialize the token mint
    */
 
-  // create instruction for the token mint account
+  // create instruction for the token mint account(tạo ra 1 tài khoản)
   const createMintAccountInstruction = SystemProgram.createAccount({
     fromPubkey: payer.publicKey,
     newAccountPubkey: mintKeypair.publicKey,
@@ -55,11 +55,12 @@ import {
     space: MINT_SIZE,
     // store enough lamports needed for our `space` to be rent exempt
     lamports: await connection.getMinimumBalanceForRentExemption(MINT_SIZE),
+    
     // tokens are owned by the "token program"
     programId: TOKEN_PROGRAM_ID,
   });
 
-  // Initialize that account as a Mint
+  // Initialize that account as a Mint(Khởi tạo tài khoản đó như một Mint)
   const initializeMintInstruction = createInitializeMint2Instruction(
     mintKeypair.publicKey,
     tokenConfig.decimals,
@@ -108,7 +109,7 @@ import {
 
   console.log("Metadata address:", metadataAccount.toBase58());
 
-  // Create the Metadata account for the Mint
+  // Create the Metadata account for the Mint(tạo ra metadata account chứa thông tin)
   const createMetadataInstruction = createCreateMetadataAccountV3Instruction(
     {
       metadata: metadataAccount,
