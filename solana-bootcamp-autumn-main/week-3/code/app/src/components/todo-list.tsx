@@ -5,13 +5,13 @@ import TodoProgram from "@/lib/todo-program";
 import { Center, Flex, List, Spinner, Text } from "@chakra-ui/react";
 import { IdlAccounts } from "@coral-xyz/anchor";
 import { useQuery } from "@tanstack/react-query";
-import { IDL } from "../../../target/types/todo_app";
+import { TodoApp } from "../../../target/types/todo_app";
 import TodoItem from "./todo-item";
 
 export default function TodoList({
   profile,
 }: {
-  profile: IdlAccounts<typeof IDL>["profile"];
+  profile: IdlAccounts<TodoApp>["profile"];
 }) {
   const provider = useAnchorProvider();
 
@@ -35,8 +35,14 @@ export default function TodoList({
   return (
     <List>
       {todos?.map((todo, idx) => (
-        <TodoItem key={idx} content={todo.content} completed={todo.completed} />
-      ))}
+        <TodoItem
+          key={idx}
+          index={idx}
+          content={todo.content}
+          completed={todo.completed}
+          profileKey={profile.key}
+          onDelete={() => window.location.reload()} // hoặc trigger refetch query
+        />))}
     </List>
   );
 }
