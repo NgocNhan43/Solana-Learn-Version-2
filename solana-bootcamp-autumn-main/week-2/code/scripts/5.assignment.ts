@@ -188,6 +188,7 @@ import { Buffer } from "buffer";
   const sig = await sendAndConfirmTransaction(connection, transaction, [
     payer,
     fungibleMint,
+    
     nftMint,
   ]);
 
