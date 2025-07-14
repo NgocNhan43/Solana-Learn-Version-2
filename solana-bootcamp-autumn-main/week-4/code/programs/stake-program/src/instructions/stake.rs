@@ -54,7 +54,7 @@ pub fn stake(ctx: Context<Stake>, amount: u64) -> Result<()> {
     stake_info.staker = ctx.accounts.staker.key();
     stake_info.mint = ctx.accounts.mint.key();
     stake_info.stake_at = clock.slot;
-
+    stake_info.is_staked = true;   
     // Cộng dồn số lượng stake
     stake_info.amount = stake_info.amount.checked_add(amount).unwrap();
 
