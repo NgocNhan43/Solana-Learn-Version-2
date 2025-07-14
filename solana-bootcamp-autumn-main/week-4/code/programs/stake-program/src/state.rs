@@ -1,15 +1,12 @@
 use anchor_lang::prelude::*;
 
+// Dữ liệu lưu trong tài khoản stake_info
 #[account]
-#[derive(InitSpace)]
+#[derive(InitSpace)] // Tự tính dung lượng cấp phát
 pub struct StakeInfo {
-    pub staker: Pubkey,
-
-    pub mint: Pubkey,
-
-    pub stake_at: u64,
-
-    pub is_staked: bool,
-
-    pub amount: u64,
+    pub staker: Pubkey,  // người stake
+    pub mint: Pubkey,    // token đã stake
+    pub stake_at: u64,   // slot khi stake
+      pub is_staked: bool,
+    pub amount: u64,     // số lượng token đang stake
 }

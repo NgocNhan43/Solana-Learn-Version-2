@@ -11,14 +11,17 @@ use anchor_spl::{
 #[derive(Accounts)]
 pub struct Unstake<'info> {
     #[account(mut)]
-    pub staker: Signer<'info>, // What happens if the staker provided is not the original creator of the stake information?
+    pub staker: Signer<'info>,
 
-    pub mint: Account<'info, Mint>, // What happens if the provided mint address does not match the mint address in the stake information?
+    pub mint: Account<'info, Mint>,
 
     #[account(
         mut,
-        seeds = [STAKE_INFO_SEED, staker.key().as_ref()],
+        seeds = [STAKE_INFO_SEED, staker.key().as_ref(), mint.key().as_ref()],
         bump,
+        has_one = staker,
+        has_one = mint,
+        close = staker // sau khi unstake hết thì đóng account, hoàn trả lamport
     )]
     pub stake_info: Account<'info, StakeInfo>,
 
@@ -31,7 +34,7 @@ pub struct Unstake<'info> {
 
     #[account(
         mut,
-        seeds = [REWARD_VAULT_SEED],
+        seeds = [REWARD_VAULT_SEED, mint.key().as_ref()],
         bump,
         token::mint = mint,
         token::authority = reward_vault,
@@ -50,29 +53,33 @@ pub struct Unstake<'info> {
     pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
-
-pub fn unstake(ctx: Context<Unstake>) -> Result<()> {
+pub fn unstake(ctx: Context<Unstake>, amount: u64) -> Result<()> {
     let stake_info = &ctx.accounts.stake_info;
 
-    if !stake_info.is_staked {
-        return Err(AppError::NotStaked.into());
-    }
+    // Kiểm tra số lượng rút phải > 0 và <= số lượng đang stake
+    require!(amount > 0 && amount <= stake_info.amount, AppError::NoToken);
 
+    // Tính số block đã stake
     let clock = Clock::get()?;
-
     let slot_passed = clock.slot - stake_info.stake_at;
 
-    let stake_amount = stake_info.amount;
-
-    let reward = slot_passed
-        .checked_mul(10u64.pow(ctx.accounts.mint.decimals as u32))
+    // Tính phần thưởng: 1% mỗi block trên số lượng unstake
+    let reward = amount
+        .checked_mul(slot_passed)
+        .unwrap()
+        .checked_div(100)
         .unwrap();
-    
-    msg!("reward: {}", reward);
 
-    // transfer reward to staker
-    let reward_vault_bump = ctx.bumps.reward_vault;
-    let reward_vault_signer_seeds: &[&[&[u8]]] = &[&[REWARD_VAULT_SEED, &[reward_vault_bump]]];
+    msg!("Unstaking {} tokens after {} slots => reward: {}", amount, slot_passed, reward);
+
+    // ==== Chuyển reward ====
+    let mint_key = ctx.accounts.mint.key(); // cần tách ra để tránh lỗi borrow tạm thời
+    let reward_vault_signer_seeds: &[&[&[u8]]] = &[&[
+        REWARD_VAULT_SEED,
+        mint_key.as_ref(),
+        &[ctx.bumps.reward_vault],
+    ]];
+
     transfer(
         CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
@@ -86,11 +93,14 @@ pub fn unstake(ctx: Context<Unstake>) -> Result<()> {
         reward,
     )?;
 
-    // transfer token to vault
-    let stake_info_bump = ctx.bumps.stake_info;
-    let staker_key = ctx.accounts.staker.key();
-    let stake_info_signer_seeds: &[&[&[u8]]] =
-        &[&[STAKE_INFO_SEED, staker_key.as_ref(), &[stake_info_bump]]];
+    // ==== Chuyển lại token đã stake ====
+    let staker_key = ctx.accounts.staker.key(); // tránh giá trị tạm thời
+    let stake_info_signer_seeds: &[&[&[u8]]] = &[&[
+        STAKE_INFO_SEED,
+        staker_key.as_ref(),
+        mint_key.as_ref(),
+        &[ctx.bumps.stake_info],
+    ]];
 
     transfer(
         CpiContext::new_with_signer(
@@ -102,15 +112,20 @@ pub fn unstake(ctx: Context<Unstake>) -> Result<()> {
             },
             stake_info_signer_seeds,
         ),
-        stake_amount,
+        amount,
     )?;
 
-    // update stake_info
+    // ==== Cập nhật hoặc đóng stake_info ====
     let stake_info = &mut ctx.accounts.stake_info;
 
-    stake_info.stake_at = clock.slot;
-    stake_info.is_staked = false;
-    stake_info.amount = 0;
+    if stake_info.amount == amount {
+        // sẽ bị đóng tự động do close = staker
+        msg!("Unstaked toàn bộ => đóng stake_info");
+    } else {
+        // chỉ cập nhật nếu vẫn còn token
+        stake_info.amount -= amount;
+        stake_info.stake_at = clock.slot; // cập nhật lại thời gian stake cho phần còn lại
+    }
 
     Ok(())
 }

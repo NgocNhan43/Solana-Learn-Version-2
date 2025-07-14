@@ -7,12 +7,12 @@ pub struct Initialize<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
 
-    pub mint: Account<'info, Mint>,
+    pub mint: Account<'info, Mint>, // Token dùng làm phần thưởng
 
     #[account(
         init_if_needed,
         payer = admin,
-        seeds = [REWARD_VAULT_SEED], // How would the system handle multiple reward vaults for different tokens?        
+        seeds = [REWARD_VAULT_SEED, mint.key().as_ref()], // Vault riêng cho mỗi token
         bump,
         token::mint = mint,
         token::authority = reward_vault,
@@ -23,6 +23,7 @@ pub struct Initialize<'info> {
     pub token_program: Program<'info, Token>,
 }
 
+// Không cần logic gì, chỉ tạo vault nếu chưa tồn tại
 pub fn initialize(_ctx: Context<Initialize>) -> Result<()> {
     Ok(())
 }

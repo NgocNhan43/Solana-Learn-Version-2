@@ -13,12 +13,12 @@ pub struct Stake<'info> {
     #[account(mut)]
     pub staker: Signer<'info>,
 
-    pub mint: Account<'info, Mint>,
+    pub mint: Account<'info, Mint>, // Token được stake
 
     #[account(
         init_if_needed,
         payer = staker,
-        seeds = [STAKE_INFO_SEED, staker.key().as_ref()], // What if a user wants to stake multiple types of tokens?        
+        seeds = [STAKE_INFO_SEED, staker.key().as_ref(), mint.key().as_ref()],
         bump,
         space = 8 + StakeInfo::INIT_SPACE
     )]
@@ -30,14 +30,14 @@ pub struct Stake<'info> {
         associated_token::mint = mint,
         associated_token::authority = stake_info,
     )]
-    pub vault_token_account: Account<'info, TokenAccount>,
+    pub vault_token_account: Account<'info, TokenAccount>, // Token được giữ trong PDA
 
     #[account(
         mut,
         associated_token::mint = mint,
         associated_token::authority = staker,
     )]
-    pub staker_token_account: Account<'info, TokenAccount>,
+    pub staker_token_account: Account<'info, TokenAccount>, // Token từ người dùng
 
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
@@ -47,23 +47,18 @@ pub struct Stake<'info> {
 pub fn stake(ctx: Context<Stake>, amount: u64) -> Result<()> {
     let stake_info = &mut ctx.accounts.stake_info;
 
-    if stake_info.is_staked {
-        return Err(AppError::IsStaked.into());
-    }
-
-    if amount <= 0 {
-        return Err(AppError::NoToken.into());
-    }
+    require!(amount > 0, AppError::NoToken);
 
     let clock = Clock::get()?;
 
     stake_info.staker = ctx.accounts.staker.key();
     stake_info.mint = ctx.accounts.mint.key();
     stake_info.stake_at = clock.slot;
-    stake_info.is_staked = true;
-    stake_info.amount = amount;
 
-    // transfer token to vault
+    // Cộng dồn số lượng stake
+    stake_info.amount = stake_info.amount.checked_add(amount).unwrap();
+
+    // Chuyển token vào vault
     transfer(
         CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
